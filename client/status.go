@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 )
@@ -22,4 +23,19 @@ func SayErr(message string, args ...interface{}) {
 func Die(message string, args ...interface{}) {
 	say(os.Stderr, message, args)
 	os.Exit(1)
+}
+
+func Prompt(prompt string) string {
+	fmt.Printf("rdoctor: %s: ", prompt)
+	scanner := bufio.NewScanner(os.Stdin)
+	if !scanner.Scan() {
+		SayOut("")
+		err := scanner.Err()
+		if err != nil {
+			Die("Could not read input: %s", err)
+		} else {
+			Die("EOF while waiting for input")
+		}
+	}
+	return scanner.Text()
 }
