@@ -6,9 +6,9 @@ import (
 )
 
 func say(where *os.File, message string, args []interface{}) {
-	fmt.Print("rdoctor: ")
-	fmt.Printf(message, args...)
-	fmt.Println()
+	fmt.Fprint(where, "rdoctor: ")
+	fmt.Fprintf(where, message, args...)
+	fmt.Fprintln(where)
 }
 
 func SayOut(message string, args ...interface{}) {
