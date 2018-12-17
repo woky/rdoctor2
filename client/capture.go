@@ -9,9 +9,11 @@ import (
 	"os/exec"
 	"os/signal"
 	"syscall"
+	"time"
 )
 
 type CapturedLine struct {
+	Timestamp  time.Time
 	Line       string
 	LineNumber uint64
 	Stderr     bool
@@ -23,11 +25,11 @@ func (c CapturedLine) String() string {
 	if c.Stderr {
 		origin = "STDERR"
 	}
-	format := "%s L%03d: %s"
+	format := "%s %v L%03d %s"
 	if c.Eof {
-		format = "%s L%03d EOF: %s"
+		format = "%s %v EOF L%03d %s"
 	}
-	return fmt.Sprintf(format, origin, c.LineNumber, c.Line)
+	return fmt.Sprintf(format, origin, c.Timestamp, c.LineNumber, c.Line)
 }
 
 func readLines(pipe io.ReadCloser, lines chan CapturedLine, stderr bool) {
@@ -38,20 +40,21 @@ func readLines(pipe io.ReadCloser, lines chan CapturedLine, stderr bool) {
 		copyOut = os.Stderr
 	}
 	scanner := bufio.NewScanner(pipe)
-	var lineNumber uint64 = 0
+	var lineNumber uint64 = 1
 	for {
 		eof := !scanner.Scan()
 		capturedLine := CapturedLine{
+			Timestamp:  time.Now(),
 			Line:       scanner.Text(),
 			LineNumber: lineNumber,
 			Stderr:     stderr,
 			Eof:        eof,
 		}
-		fmt.Fprintln(copyOut, capturedLine.Line)
 		lines <- capturedLine
 		if eof {
 			break
 		}
+		fmt.Fprintln(copyOut, capturedLine.Line)
 		lineNumber++
 	}
 	if err := scanner.Err(); err != nil {
