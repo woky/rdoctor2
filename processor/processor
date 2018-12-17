@@ -1,0 +1,122 @@
+#!/usr/bin/env python
+
+import sys, os
+import functools
+import re
+from datetime import datetime
+
+import redis
+from elasticsearch import Elasticsearch
+
+def create_redis():
+    url = os.environ.get('REDIS_URL', 'redis://127.0.0.1:6379/0')
+    return redis.Redis.from_url(url, decode_responses=True)
+
+def create_elasticsearch():
+    url = os.environ.get('ELASTICSEARCH_URL', 'http://127.0.0.1:9200')
+    return Elasticsearch(url)
+
+log_regex1 = re.compile('^(.*?) \\[(.*?)\\]\\s+(.*?)\\s+(.*?) - (.*)$')
+
+redis = create_redis()
+elastic = create_elasticsearch()
+
+@functools.lru_cache(maxsize=128)
+def get_session_info(channel):
+    match = re.search('session-notify:(.*)', channel)
+    if not match:
+        print(f'Unknown channel: {channel}', file=sys.stderr)
+        return None
+    session_id = match.group(1)
+    info = redis.hgetall('session-info:' + session_id)
+    if not 'api_key' in info:
+        print(f'No api_key in session {session_id}', file=sys.stderr)
+        return None
+    identity = redis.get('apikeys:' + info['api_key'])
+    if not identity:
+        print(f'No such identity', file=sys.stderr)
+        return None
+    return {
+        'session': info['id'],
+        'api_key': info['api_key'],
+        'address': info['address'],
+        'identity': identity
+    }
+
+class ProtocolException(Exception):
+    def __init__(self, message):
+        super().__init__(self, message)
+
+def parse_log_line(line: str):
+    match = log_regex1.match(line)
+    if match:
+        return {
+            'timestamp': match[1],
+            'thread':    match[2],
+            'level':     match[3],
+            'logger':    match[4],
+            'message':   match[5],
+        }
+    return None
+
+def parse_event(line: str):
+    line = line.split('|', 4)
+    if len(line) < 2:
+        raise ProtocolException(f'Invalid event')
+
+    if len(line[0]) != 2:
+        raise ProtocolException(f'Invalid event type/origin: {line[0]}')
+    if line[0][0] == 'O':
+        origin = 'stdout'
+    elif line[0][0] == 'E':
+        origin = 'stderr'
+    else:
+        raise ProtocolException(f'Invalid origin: {line[0][0]}')
+
+    if line[0][1] == 'L':
+        event_type = 'line'
+    elif line[0][1] == 'O':
+        event_type = 'open'
+    elif line[0][1] == 'C':
+        event_type = 'close'
+    else:
+        raise ProtocolException(f'Invalid event type: {line[0][1]}')
+
+    try:
+        ts_epoch = int(line[1])/1000
+        timestamp = datetime.utcfromtimestamp(ts_epoch)
+    except ValueError:
+        raise ProtocolException(f'Invalid timestamp: {line[1]}')
+
+    try:
+        line_number = int(line[2])
+    except ValueError:
+        raise ProtocolException(f'Invalid line number: {line[2]}')
+
+    message = line[3]
+    parsed = parse_log_line(message)
+
+    return {
+        'origin': origin,
+        '@timestamp': timestamp,
+        'timestamp_epoch': ts_epoch,
+        'event_type': event_type,
+        'message': message,
+        'parsed': parsed
+    }
+
+pubsub = redis.pubsub()
+pubsub.psubscribe('session-notify:*')
+import time
+for message in pubsub.listen():
+    if message['type'] != 'pmessage':
+        continue
+    session_info = get_session_info(message['channel'])
+    if not session_info:
+        continue
+    try:
+        event = parse_event(message['data'])
+        event = { **event, **session_info }
+        elastic.index(index='rdoctor', doc_type='event', body=event)
+    except ProtocolException as e:
+        print(e, file=sys.stderr)

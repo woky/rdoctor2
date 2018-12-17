@@ -1,0 +1,5 @@
+FROM python:alpine
+RUN apk update && apk add gcc musl-dev go git
+RUN adduser -S -h /home/alice alice
+WORKDIR /home/alice
+USER alice

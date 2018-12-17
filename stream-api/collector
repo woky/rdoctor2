@@ -1,0 +1,55 @@
+#!/usr/bin/env python
+
+from typing import *
+import dataclasses
+import sys, os
+from datetime import datetime
+import uuid
+import urllib.parse
+import fileinput
+
+import redis
+
+@dataclasses.dataclass
+class Session:
+    id: str
+    api_key: str
+    address: str
+    start_time: int
+    events_key: str
+    notify_key: str
+
+def create_redis() -> redis.Redis:
+    url = os.environ.get('REDIS_URL', 'redis://127.0.0.1:6379/0')
+    return redis.Redis.from_url(url, decode_responses=True)
+
+def create_session(redis: redis.Redis) -> Optional[Session]:
+    start_time = int(datetime.utcnow().timestamp())
+    query_args = urllib.parse.parse_qs(os.environ['QUERY_STRING'])
+    api_key = query_args.get('key', None)
+    if not api_key:
+        return None
+    identity = redis.get('apikeys:' + api_key[0])
+    if not identity:
+        return None
+    session_id = str(start_time) + '-' + str(uuid.uuid4())
+    session = Session(
+            session_id,
+            api_key[0],
+            os.environ['REMOTE_ADDR'],
+            start_time,
+            'session-events:' + session_id,
+            'session-notify:' + session_id)
+    redis.hmset('session-info:' + session_id, dataclasses.asdict(session))
+    return session
+
+if __name__ == '__main__':
+    sys.stdout.close()
+    redis = create_redis()
+    session = create_session(redis)
+    if not session:
+        sys.exit(1)
+    for line in fileinput.input():
+        line = line.rstrip('\n\r')
+        redis.rpush(session.events_key, line)
+        redis.publish(session.notify_key, line)

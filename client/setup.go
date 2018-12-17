@@ -56,16 +56,15 @@ func ping(config *Config) bool {
 	if err != nil {
 		Die(err.Error())
 	}
-	statusCategory := response.StatusCode / 100
-	switch statusCategory {
-	case 2:
-		return true
-	case 4:
-		return false
-	default:
-		Die("Unsuccessful response: %s", response.Status)
+	status := response.StatusCode
+	if status == 401 {
 		return false
 	}
+	if status/100 == 2 {
+		return true
+	}
+	Die("Unsuccessful service response: %s", response.Status)
+	panic("")
 }
 
 func RunSetup(config *Config) {

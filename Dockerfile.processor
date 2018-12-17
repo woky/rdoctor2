@@ -1,0 +1,15 @@
+FROM rchain/rdoctor-build as build
+COPY processor/requirements.txt .
+RUN :\
+  && python -mvenv venv \
+  && source venv/bin/activate \
+  && pip install -r requirements.txt \
+  ;
+
+FROM python:alpine
+RUN adduser -S -h /home/alice alice
+WORKDIR /home/alice
+USER alice
+COPY --from=build --chown=alice:0 /home/alice/venv venv
+COPY processor/* ./
+CMD source venv/bin/activate && exec ./processor

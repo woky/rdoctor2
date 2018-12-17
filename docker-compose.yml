@@ -1,0 +1,61 @@
+version: '3'
+
+networks:
+  rdoctor-net:
+
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch-oss:${ELASTIC_VERSION}
+    container_name: rdoctor-elasticsearch
+    healthcheck:
+      test: curl -f http://0.0.0.0:9200
+    volumes:
+    - ${RDOCTOR_ROOTDIR}/data/elasticsearch:/usr/share/elasticsearch/data
+    ports:
+    - 127.0.0.1:9200:9200
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana-oss:${ELASTIC_VERSION}
+    container_name: rdoctor-kibana
+    depends_on:
+    - elasticsearch
+    ports:
+    - 127.0.0.1:5601:5601
+
+  redis:
+    image: redis
+    container_name: rdoctor-redis
+    volumes:
+    - ${RDOCTOR_ROOTDIR}/data/redis:/data
+    ports:
+    - 127.0.0.1:6379:6379
+
+  rest-api:
+    image: rchain/rdoctor-rest-api
+    container_name: rdoctor-rest-api
+    depends_on:
+    - redis
+    ports:
+    - 127.0.0.1:8000:8000
+    environment:
+    - REDIS_URL=redis://rdoctor-redis:6379/0
+
+  stream-api:
+    image: rchain/rdoctor-stream-api
+    container_name: rdoctor-stream-api
+    depends_on:
+    - redis
+    ports:
+    - 127.0.0.1:8001:8001
+    environment:
+    - REDIS_URL=redis://rdoctor-redis:6379/0
+
+  processor:
+    image: rchain/rdoctor-processor
+    container_name: rdoctor-processor
+    depends_on:
+    - redis
+    - elasticsearch
+    environment:
+    - REDIS_URL=redis://rdoctor-redis:6379/0
+    - ELASTICSEARCH_URL=http://rdoctor-elasticsearch:9200
