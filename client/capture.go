@@ -4,14 +4,19 @@ package main
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <fcntl.h>
 */
 import "C"
 
 import (
 	"bufio"
 	"fmt"
+	"golang.org/x/sys/unix"
+	"io"
 	"os"
+	"strings"
 	"syscall"
+	"time"
 )
 
 type CapturedLine struct {
@@ -33,14 +38,29 @@ func (c CapturedLine) String() string {
 	return fmt.Sprintf(format, origin, c.LineNumber, c.Line)
 }
 
-func captureOutput(fd int, linesChan chan CapturedLine, stderr bool) {
-	file := os.NewFile(uintptr(fd), "")
-	scanner := bufio.NewScanner(file)
+func captureOutput(fd uintptr, linesChan chan CapturedLine, stderr bool) {
+	defer close(linesChan)
+	_, err := unix.FcntlInt(fd, unix.F_SETFL, unix.O_NONBLOCK)
+	if err != nil {
+		Die("Could not make file descriptor non-blocking: %s", err)
+	}
+	file := os.NewFile(fd, "")
+	defer file.Close()
+	reader := bufio.NewReader(file)
 	var lineNumber uint64 = 1
 	for {
-		eof := !(scanner.Scan())
+		line, err := reader.ReadString('\n')
+		line = strings.TrimRight(line, "\r\n")
+		eof := false
+		if err != nil {
+			if err != io.EOF {
+				SayErr("Could not read from pipe: %s", err)
+				break
+			}
+			eof = true
+		}
 		capturedLine := CapturedLine{
-			Line:       scanner.Text(),
+			Line:       line,
 			LineNumber: lineNumber,
 			Stderr:     stderr,
 			Eof:        eof,
@@ -51,14 +71,42 @@ func captureOutput(fd int, linesChan chan CapturedLine, stderr bool) {
 		}
 		lineNumber++
 	}
-	if err := scanner.Err(); err != nil {
-		PrintErr("Could not read from pipe: %s", err)
-	}
-	file.Close()
-	close(linesChan)
+	SayErr("Exit")
 }
 
-func captureBoth(stdoutFd int, stderrFd int, linesChan chan CapturedLine) {
+//func captureOutput(fd uintptr, linesChan chan CapturedLine, stderr bool) {
+//	defer close(linesChan)
+//	_, err := unix.FcntlInt(fd, unix.F_SETFL, unix.O_NONBLOCK)
+//	if err != nil {
+//		Die("Could not make file descriptor non-blocking: %s", err)
+//	}
+//	file := os.NewFile(fd, "")
+//	defer file.Close()
+//	scanner := bufio.NewScanner(file)
+//	var lineNumber uint64 = 1
+//	for {
+//		SayOut("Reading")
+//		eof := !scanner.Scan()
+//		capturedLine := CapturedLine{
+//			Line:       scanner.Text(),
+//			LineNumber: lineNumber,
+//			Stderr:     stderr,
+//			Eof:        eof,
+//		}
+//		SayOut("Writing to chan")
+//		linesChan <- capturedLine
+//		if eof {
+//			break
+//		}
+//		lineNumber++
+//	}
+//	if err := scanner.Err(); err != nil {
+//		SayErr("Could not read from pipe: %s", err)
+//	}
+//	SayErr("Exit")
+//}
+
+func captureBoth(stdoutFd uintptr, stderrFd uintptr, linesChan chan CapturedLine) {
 	stdoutLinesChan := make(chan CapturedLine)
 	stderrLinesChan := make(chan CapturedLine)
 	go captureOutput(stdoutFd, stdoutLinesChan, false)
@@ -111,10 +159,12 @@ func ForkMainProgram(cmdLine []string, linesChan chan CapturedLine) {
 	childPid := int(retInt)
 
 	if childPid == 0 {
+		time.Sleep(1 * time.Second)
+		SayOut("Reading...")
 		syscall.Close(stdoutPipe[1])
 		syscall.Close(stderrPipe[1])
 		os.Stdin.Close()
-		go captureBoth(stdoutPipe[0], stderrPipe[0], linesChan)
+		go captureBoth(uintptr(stdoutPipe[0]), uintptr(stderrPipe[0]), linesChan)
 		return
 	}
 
