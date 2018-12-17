@@ -2,31 +2,52 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"os"
 )
 
-func say(where *os.File, message string, args []interface{}) {
-	fmt.Fprint(where, "rdoctor: ")
-	fmt.Fprintf(where, message, args...)
-	fmt.Fprintln(where)
+const prefix = "rdoctor: "
+
+func PrintOut(message string, args ...interface{}) {
+	var buffer bytes.Buffer
+	buffer.WriteString(prefix)
+	buffer.WriteString(fmt.Sprintf(message, args...))
+	fmt.Print(buffer.String())
+}
+
+func PrintErr(message string, args ...interface{}) {
+	var buffer bytes.Buffer
+	buffer.WriteString(prefix)
+	buffer.WriteString("ERROR: ")
+	buffer.WriteString(fmt.Sprintf(message, args...))
+	fmt.Fprint(os.Stderr, buffer.String())
 }
 
 func SayOut(message string, args ...interface{}) {
-	say(os.Stdout, message, args)
+	var buffer bytes.Buffer
+	buffer.WriteString(prefix)
+	buffer.WriteString(fmt.Sprintf(message, args...))
+	buffer.WriteString("\n")
+	fmt.Print(buffer.String())
 }
 
 func SayErr(message string, args ...interface{}) {
-	say(os.Stderr, message, args)
+	var buffer bytes.Buffer
+	buffer.WriteString(prefix)
+	buffer.WriteString("ERROR: ")
+	buffer.WriteString(fmt.Sprintf(message, args...))
+	buffer.WriteString("\n")
+	fmt.Fprint(os.Stderr, buffer.String())
 }
 
 func Die(message string, args ...interface{}) {
-	say(os.Stderr, message, args)
+	SayErr(message, args...)
 	os.Exit(1)
 }
 
 func Prompt(prompt string) string {
-	fmt.Printf("rdoctor: %s: ", prompt)
+	PrintOut("%s: ", prompt)
 	scanner := bufio.NewScanner(os.Stdin)
 	if !scanner.Scan() {
 		SayOut("")
