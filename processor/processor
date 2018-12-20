@@ -107,7 +107,7 @@ def parse_event(line: str):
 
 pubsub = redis.pubsub()
 pubsub.psubscribe('session-notify:*')
-import time
+
 for message in pubsub.listen():
     if message['type'] != 'pmessage':
         continue
