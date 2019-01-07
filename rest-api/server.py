@@ -92,3 +92,8 @@ async def api_confirm_key():
 async def api_ws_submit_log():
     location = stream_api_url + websocket.full_path
     return '', 307, { 'Location': location }
+
+# TODO replace with web form with CAPTCHA
+@app.route('/confirm')
+async def endp_confirm():
+    return 'Confirmed ;-)'
