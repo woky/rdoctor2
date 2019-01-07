@@ -17,6 +17,7 @@ def create_elasticsearch():
     return Elasticsearch(url)
 
 log_regex1 = re.compile('^(.*?) \\[(.*?)\\]\\s+(.*?)\\s+(.*?) - (.*)$')
+identity_regex = re.compile('^(.*?) <(.*)>$')
 
 redis = create_redis()
 elastic = create_elasticsearch()
@@ -36,11 +37,19 @@ def get_session_info(channel):
     if not identity:
         print(f'No such identity', file=sys.stderr)
         return None
+    id_match = identity_regex.match(identity)
+    if not id_match:
+        print(f'Invalid identity format: "{id_match}"', file.sys.stderr)
+        return None
+    user_info = { 'name': id_match.group(1) }
+    if id_match.group(2):
+        user_info['email'] = id_match.group(2)
     return {
-        'session': info['id'],
-        'api_key': info['api_key'],
-        'address': info['address'],
-        'identity': identity
+        'session':  info['id'],
+        'api_key':  info['api_key'],
+        'address':  info['address'],
+        'identity': identity,
+        'user':     user_info
     }
 
 class ProtocolException(Exception):
