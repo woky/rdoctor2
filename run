@@ -1,0 +1,8 @@
+#!/bin/bash -e
+
+export ELASTIC_VERSION=6.5.3
+export RDOCTOR_ROOTDIR=$(readlink -f $(dirname ${BASH_SOURCE:-$0}))
+
+cd $RDOCTOR_ROOTDIR
+./build-docker
+docker-compose up
