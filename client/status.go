@@ -32,13 +32,21 @@ func SayOut(message string, args ...interface{}) {
 	fmt.Print(buffer.String())
 }
 
-func SayErr(message string, args ...interface{}) {
+func sayStderr(level string, message string, args ...interface{}) {
 	var buffer bytes.Buffer
 	buffer.WriteString(prefix)
-	buffer.WriteString("ERROR: ")
+	buffer.WriteString(level)
 	buffer.WriteString(fmt.Sprintf(message, args...))
 	buffer.WriteString("\n")
 	fmt.Fprint(os.Stderr, buffer.String())
+}
+
+func SayErr(message string, args ...interface{}) {
+	sayStderr("ERROR: ", message, args...)
+}
+
+func Warn(message string, args ...interface{}) {
+	sayStderr("WARNING: ", message, args...)
 }
 
 func Die(message string, args ...interface{}) {

@@ -1,10 +1,12 @@
 package main
 
 import (
+	"fmt"
 	"net/url"
 	"os"
 	"os/user"
 	"path"
+	"runtime"
 	"strings"
 
 	//"github.com/go-ini/ini"
@@ -96,6 +98,16 @@ func (conf *Config) GetServiceWsUrl(path string) string {
 		proto = "ws://"
 	}
 	return proto + conf.GetServiceAddress() + path
+}
+
+func (conf *Config) GetLatestVersionUrl() string {
+	return conf.GetServiceHttpUrl("/download/latest/version.txt")
+}
+
+func (conf *Config) GetLatestClientUrl() string {
+	path := fmt.Sprintf("/download/latest/%s.%s/rdoctor", runtime.GOOS,
+		runtime.GOARCH)
+	return conf.GetServiceHttpUrl(path)
 }
 
 func (conf *Config) GetNewKeyUrl(identity string) string {
