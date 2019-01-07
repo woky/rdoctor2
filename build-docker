@@ -1,0 +1,10 @@
+#!/bin/bash
+
+TARGETS=(build processor rest-api stream-api)
+V=$(git describe --tags --always)
+
+for img in ${TARGETS[@]}; do
+	name=rchain/rdoctor-$img
+	docker build -t $name:$V -f Dockerfile.$img .
+	docker tag $name:$V $name:latest
+done
